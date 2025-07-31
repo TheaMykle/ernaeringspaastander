@@ -68,7 +68,19 @@ def style_tabell(df):
     return styled
 
 # --- App start ---
-st.set_page_config(page_title="🧀🥛 Ernæringspåstander for meieriprodukter", layout="wide", page_icon="icon.png")
+st.set_page_config(
+    page_title="🧀🥛 Ernæringspåstander for meieriprodukter",
+    layout="wide",
+    page_icon="icon.png"
+)
+
+# Legg til favicon og manifest i head
+st.markdown("""
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+""", unsafe_allow_html=True)
+
 st.markdown("<h2 style='font-size:28px;'>🧀🥛 Ernæringspåstander for meieriprodukter</h2>", unsafe_allow_html=True)
 st.caption("Datakilder oppgitt. Referanseverdier hentet fra Matinformasjonsforskriften. Produktmengde: 100 gram.")
 
@@ -108,7 +120,8 @@ if søk:
     produkter = [p for p in produkter if søk in p.lower()]
 
 for produktnavn in produkter:
-    st.markdown(f"<h5 style='margin-bottom:0.3em;'>{produktnavn}</h5>", unsafe_allow_html=True)  # <--- Mindre overskrift
+    st.subheader(f"### {produktnavn}")  # Her kan du endre til h3 om ønskelig
+
     produktdata = df_kategori[df_kategori["Produkt"] == produktnavn].copy()
 
     produktdata = produktdata[produktdata["Næringsstoff"].notna()]
