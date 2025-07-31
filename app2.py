@@ -4,7 +4,7 @@ import numpy as np
 
 @st.cache_data
 def load_data():
-    xls = pd.ExcelFile("naeringsdata.xlsx")
+    xls = pd.ExcelFile("naeringsdata.xlsx")  # Endret sti til root
     data = []
     for sheet in xls.sheet_names:
         df = xls.parse(sheet)
@@ -20,10 +20,10 @@ def generer_vurdering_liste(df):
 
     vurdering = ""
     if kilder:
-        vurdering += "✅ Kilde til:  \n"
+        vurdering += "✅ Kilde til:\n"
         vurdering += "\n".join(f"- {k}" for k in kilder) + "\n"
     if rik:
-        vurdering += "  🌟 Rik på:  \n"
+        vurdering += "\n🌟 Rik på:\n"
         vurdering += "\n".join(f"- {r}" for r in rik) + "\n"
     if not vurdering:
         vurdering = "🔎 Ingen ernæringspåstander kan fremmes basert på dataene."
@@ -34,9 +34,9 @@ def legg_emoji(tekst, kolonne):
         return ""
     tekst = str(tekst)
     if kolonne == "Kilde til?" and tekst.lower().startswith("ja"):
-        return f"{tekst} ✅"
+        return f"✅ {tekst}"
     elif kolonne == "Rik på?" and tekst.lower().startswith("ja"):
-        return f"{tekst} 🌟"
+        return f"🌟 {tekst}"
     return tekst
 
 def style_tabell(df):
@@ -49,9 +49,6 @@ def style_tabell(df):
         {'selector': 'th', 'props': [
             ('font-weight', 'bold'),
             ('background-color', '#f0f0f0'),
-            ('position', 'sticky'),
-            ('top', '0'),
-            ('z-index', '100'),
             ('text-align', 'left')
         ]},
         {'selector': 'td', 'props': [('text-align', 'left')]}
@@ -70,31 +67,9 @@ def style_tabell(df):
     )
     return styled
 
-def variasjon_melding(df_kategori):
-    naeringsstoff_liste = [
-        "Protein", "Kalsium", "Jod", "Vitamin B12", "Vitamin B2", 
-        "Fosfor", "Kalium", "Magnesium", "Vitamin A", "Vitamin D"
-    ]
-
-    variasjon_naringsstoff = []
-    for n in naeringsstoff_liste:
-        df_n = df_kategori[df_kategori["Næringsstoff"] == n]
-        if df_n.empty:
-            continue
-        andeler_kilde = df_n["Kilde til?"].str.contains("Ja", na=False).mean()
-        andeler_rik = df_n["Rik på?"].str.contains("Ja", na=False).mean()
-        # vurderer stor variasjon om andel ligger mellom 0.25 og 0.75
-        if 0.25 < andeler_kilde < 0.75 or 0.25 < andeler_rik < 0.75:
-            variasjon_naringsstoff.append(n)
-
-    if variasjon_naringsstoff:
-        tekst = "💡 Merk: Det er variasjon mellom produktene innen innhold av næringsstoff " + \
-                ", ".join(variasjon_naringsstoff) + " med tanke på hvilke ernæringspåstander som kan brukes."
-        st.info(tekst)
-
 # --- App start ---
 st.set_page_config(page_title="🧀🥛 Ernæringspåstander for meieriprodukter", layout="wide", page_icon="icon.png")
-st.title("🧀🥛 Ernæringspåstander for meieriprodukter")
+st.markdown("<h2 style='font-size:28px;'>🧀🥛 Ernæringspåstander for meieriprodukter</h2>", unsafe_allow_html=True)
 st.caption("Datakilder oppgitt. Referanseverdier hentet fra Matinformasjonsforskriften. Produktmengde: 100 gram.")
 
 df = load_data()
@@ -102,10 +77,29 @@ df = load_data()
 kategori_valg = ["Alle kategorier"] + sorted(df["Kategori"].unique())
 kategori = st.sidebar.radio("Velg kategori", kategori_valg)
 
-df_kategori = df if kategori == "Alle kategorier" else df[df["Kategori"] == kategori]
-
 if kategori != "Alle kategorier":
-    variasjon_melding(df_kategori)
+    df_kategori = df[df["Kategori"] == kategori]
+
+    # Sjekk variasjon i 'Kilde til?' og 'Rik på?' per næringsstoff i valgt kategori
+    variabler = [
+        "Protein", "Kalsium", "Jod", "Vitamin B12", "Vitamin B2",
+        "Fosfor", "Kalium", "Magnesium", "Vitamin A", "Vitamin D"
+    ]
+
+    variasjoner = []
+    for næring in variabler:
+        df_næring = df_kategori[df_kategori["Næringsstoff"] == næring]
+        if not df_næring.empty:
+            kilde_til_var = df_næring["Kilde til?"].str.contains("Ja", na=False).nunique()
+            rik_på_var = df_næring["Rik på?"].str.contains("Ja", na=False).nunique()
+            if kilde_til_var > 1 or rik_på_var > 1:
+                variasjoner.append(næring)
+
+    if variasjoner:
+        st.info(f"💡 Merk: Det er variasjon mellom produktene innen innhold av næringsstoff {', '.join(variasjoner)} med tanke på hvilke ernæringspåstander som kan brukes.")
+
+else:
+    df_kategori = df
 
 søk = st.sidebar.text_input("Søk i produkter innen valgt kategori").strip().lower()
 
@@ -113,12 +107,10 @@ produkter = df_kategori["Produkt"].dropna().unique()
 if søk:
     produkter = [p for p in produkter if søk in p.lower()]
 
-grupper = [(p, df_kategori[df_kategori["Produkt"] == p]) for p in produkter]
+for produktnavn in produkter:
+    st.markdown(f"<h5 style='margin-bottom:0.3em;'>{produktnavn}</h5>", unsafe_allow_html=True)  # <--- Mindre overskrift
+    produktdata = df_kategori[df_kategori["Produkt"] == produktnavn].copy()
 
-for produktnavn, df_gruppe in grupper:
-    st.markdown(f"<h4 style='margin-bottom:0.3em;'>{produktnavn}</h4>", unsafe_allow_html=True)
-
-    produktdata = df_gruppe.copy()
     produktdata = produktdata[produktdata["Næringsstoff"].notna()]
     produktdata = produktdata[produktdata["Næringsstoff"].str.lower() != produktnavn.lower()]
 
