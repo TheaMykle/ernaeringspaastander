@@ -1,17 +1,29 @@
 import streamlit as st
 import pandas as pd
 
+# Sidekonfigurasjon med egendefinert ikon
+st.set_page_config(
+    page_title="🧀🥛 Ernæringspåstander for meieriprodukter",
+    page_icon="icon.png",
+    layout="wide"
+)
+
+# Mobilvennlig overskrift
+st.markdown(
+    "<h2 style='font-size: 1.8rem; font-weight: 600;'>🧀🥛 Ernæringspåstander for meieriprodukter</h2>",
+    unsafe_allow_html=True
+)
+st.caption("Datakilder oppgitt. Referanseverdier hentet fra Matinformasjonsforskriften. Produktmengde: 100 gram.")
+
 @st.cache_data
 def load_data():
-    xls = pd.ExcelFile("naeringsdata.xlsx")
+    xls = pd.ExcelFile("data/naeringsdata.xlsx")
     data = []
     for sheet in xls.sheet_names:
         df = xls.parse(sheet)
         df["Produkt"] = df["Produkt"].ffill()
         df["Kategori"] = sheet
         df = df.ffill()
-        # Fjern rader der næringsstoffet er lik produktnavnet (case-insensitivt)
-        df = df[df["Næringsstoff"].str.lower() != df["Produkt"].str.lower()]
         data.append(df)
     return pd.concat(data, ignore_index=True)
 
@@ -24,7 +36,7 @@ def generer_vurdering_liste(df):
         vurdering += "✅ Kilde til:  \n"
         vurdering += "\n".join(f"- {k}" for k in kilder) + "\n"
     if rik:
-        vurdering += "\n🌟 Rik på:  \n"  
+        vurdering += "\n💡 Rik på:  \n"
         vurdering += "\n".join(f"- {r}" for r in rik) + "\n"
     if not vurdering:
         vurdering = "🔎 Ingen ernæringspåstander kan fremmes basert på dataene."
@@ -70,74 +82,52 @@ def style_tabell(df):
     )
     return styled
 
-def sjekk_varians_ai(df, kategori):
-    if kategori == "Alle kategorier":
-        return None
-
-    # Faste næringsstoffer å sjekke
-    naeringsstoffer = [
-        "Protein", "Kalsium", "Jod", "Vitamin B12", "Vitamin B2",
-        "Fosfor", "Kalium", "Magnesium", "Vitamin A", "Vitamin D"
-    ]
-
-    variasjon_næring = []
-
-    for n in naeringsstoffer:
-        df_n = df[(df["Kategori"] == kategori) & (df["Næringsstoff"].str.lower() == n.lower())]
-        if len(df_n) < 2:
-            continue
-
-        rik_ja = df_n["Rik på?"].str.contains("Ja", na=False).astype(int)
-        kilde_ja = df_n["Kilde til?"].str.contains("Ja", na=False).astype(int)
-
-        # Regn variasjon som andel produkter med/uten påstanden, dersom stor variasjon, ta med
-        # Threshold kan justeres, her sier vi 20-80% er stor variasjon
-        rik_andel = rik_ja.mean()
-        kilde_andel = kilde_ja.mean()
-
-        if 0.2 < rik_andel < 0.8 or 0.2 < kilde_andel < 0.8:
-            variasjon_næring.append(n)
-
-    if variasjon_næring:
-        tekst = "💡 Merk: Det er variasjon mellom produktene innen innhold av næringsstoff " + ", ".join(variasjon_næring) + " med tanke på hvilke ernæringspåstander som kan brukes."
-        return tekst
-    return None
-
 # --- App start ---
-st.set_page_config(page_title="🧀🥛 Ernæringspåstander for meieriprodukter", layout="wide")
-st.title("🧀🥛 Ernæringspåstander for meieriprodukter")
-st.caption("Datakilder oppgitt. Referanseverdier hentet fra Matinformasjonsforskriften. Produktmengde: 100 gram.")
-
 df = load_data()
 
 kategori_valg = ["Alle kategorier"] + sorted(df["Kategori"].unique())
 kategori = st.sidebar.radio("Velg kategori", kategori_valg)
 
-# Vis AI-varsel om variasjon først i kategori
-ai_tekst = sjekk_varians_ai(df, kategori)
-if ai_tekst:
-    st.info(ai_tekst)
-
 df_kategori = df if kategori == "Alle kategorier" else df[df["Kategori"] == kategori]
 
 søk = st.sidebar.text_input("Søk i produkter innen valgt kategori").strip().lower()
-
 produkter = df_kategori["Produkt"].dropna().unique()
+
 if søk:
     produkter = [p for p in produkter if søk in p.lower()]
 
+# AI-varsel om variasjon
+if kategori != "Alle kategorier":
+    vurder_næringsstoff = [
+        "Protein", "Kalsium", "Jod", "Vitamin B12", "Vitamin B2",
+        "Fosfor", "Kalium", "Magnesium", "Vitamin A", "Vitamin D"
+    ]
+    meldinger = []
+    for næring in vurder_næringsstoff:
+        subset = df_kategori[df_kategori["Næringsstoff"] == næring]
+        if len(subset) < 2:
+            continue
+        kilde_sett = set(subset["Kilde til?"].dropna().str.lower())
+        rik_sett = set(subset["Rik på?"].dropna().str.lower())
+        if len(kilde_sett) > 1 or len(rik_sett) > 1:
+            meldinger.append(næring)
+
+    if meldinger:
+        st.info(f"💡 Merk: Det er variasjon mellom produktene innen innhold av næringsstoffene {', '.join(meldinger)} med tanke på hvilke ernæringspåstander som kan brukes.")
+
+# Vis produkt for produkt
 for produktnavn in produkter:
     st.subheader(produktnavn)
     produktdata = df_kategori[df_kategori["Produkt"] == produktnavn].copy()
 
     produktdata = produktdata[produktdata["Næringsstoff"].notna()]
-    # Fjern næringsstoff lik produktnavnet for å unngå feil tolking
-    produktdata = produktdata[produktdata["Næringsstoff"].str.lower() != produktnavn.lower()]
+    produktdata = produktdata[~produktdata["Næringsstoff"].str.lower().isin(produkter.astype(str).str.lower())]
 
     visning = produktdata[[
         "Næringsstoff",
         "Mengde per 100 gram",
         "Benevning",
+        "Referanseverdi",  # ← Nå inkludert
         "Utregning %",
         "Kilde til?",
         "Rik på?"
