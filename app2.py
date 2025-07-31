@@ -3,7 +3,7 @@ import pandas as pd
 
 @st.cache_data
 def load_data():
-    xls = pd.ExcelFile("data/naeringsdata.xlsx")
+    xls = pd.ExcelFile("naeringsdata.xlsx")
     data = []
     for sheet in xls.sheet_names:
         df = xls.parse(sheet)
