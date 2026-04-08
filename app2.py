@@ -57,7 +57,7 @@ def style_tabell(df):
     styled = (df.style
               .apply(lambda x: ['background-color: #f9f9f9' if i % 2 == 1 else '' for i in range(len(x))], axis=1)
               .set_table_styles(styles)
-              .applymap(highlight_na)
+              #.applymap(highlight_na)
               .format({
                   "Mengde per 100 gram": "{:.1f}",
                   "Referanseverdi per 100 g": "{:.1f}",
